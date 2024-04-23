@@ -3,9 +3,7 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { CognitoStack } from '../lib/cognito-stack';
 import { ApiGatewayStack } from '../lib/api-gateway-stack';
-import { DynamoDBStack } from '../lib/dynamodb-stack';
 import { IConstruct } from 'constructs';
-
 
 class ApplyDestroyPolicyAspect implements cdk.IAspect {
   public visit(node: IConstruct): void {
@@ -16,10 +14,8 @@ class ApplyDestroyPolicyAspect implements cdk.IAspect {
 }
 
 const app = new cdk.App();
-const dynamodbStack = new DynamoDBStack(app, DynamoDBStack.name, {});
-const cognitoStack = new CognitoStack(app, CognitoStack.name, {
-  table: dynamodbStack.table,
-});
+
+const cognitoStack = new CognitoStack(app, CognitoStack.name, {});
 
 new ApiGatewayStack(app, ApiGatewayStack.name, {
   cognito: {

@@ -1,0 +1,217 @@
+{
+	"info": {
+		"_postman_id": "bddef709-19cd-4e96-811c-6e74baca9311",
+		"name": "Cognito Impersonation",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "2556357"
+	},
+	"item": [
+		{
+			"name": "Create User",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{UserEmail}}\",\n    \"firstName\": \"{{$randomFirstName}}\",\n    \"lastName\": \"{{$randomLastName}}\",\n    \"tenants\": [\n        \"CUS-01\",\n        \"CUS-02\"\n    ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{ApiGatewayUrl}}/user",
+					"host": [
+						"{{ApiGatewayUrl}}"
+					],
+					"path": [
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Sign In",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();",
+							"pm.environment.set('TokenLogin', responseData.IdToken)",
+							"",
+							"a = responseData.IdToken.split('.');",
+							"",
+							"var words = CryptoJS.enc.Base64.parse(a[1]);",
+							"var textString = CryptoJS.enc.Utf8.stringify(words);",
+							"",
+							"console.log(textString)"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"{{UserEmail}}\",\n    \"password\": \"IM\\\"*z)9p]@\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{ApiGatewayUrl}}/signin",
+					"host": [
+						"{{ApiGatewayUrl}}"
+					],
+					"path": [
+						"signin"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Impersonate",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();",
+							"pm.environment.set('TokenImpersonation', responseData.IdToken)",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{TokenLogin}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"{{UserEmail}}\",\n    \"tenant\": \"{{ActiveTenant}}\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{ApiGatewayUrl}}/user/impersonate",
+					"host": [
+						"{{ApiGatewayUrl}}"
+					],
+					"path": [
+						"user",
+						"impersonate"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Authorize",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{TokenImpersonation}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"tenant\": \"{{ActiveTenant}}\",\n    \"aud\": \"31m8faijfrc5ivst0osk31vsq\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{ApiGatewayUrl}}/authorize",
+					"host": [
+						"{{ApiGatewayUrl}}"
+					],
+					"path": [
+						"authorize"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Down Stream",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{TokenImpersonation}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"tenant\": \"CUS-01\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{ApiGatewayUrl}}/downstream",
+					"host": [
+						"{{ApiGatewayUrl}}"
+					],
+					"path": [
+						"downstream"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

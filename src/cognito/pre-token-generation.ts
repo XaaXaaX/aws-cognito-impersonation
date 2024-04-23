@@ -1,21 +1,18 @@
 import { PreTokenGenerationTriggerEvent } from 'aws-lambda';
-import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 
-const client = new DynamoDBClient({ region: process.env.REGION });
 export const handler = async (event: PreTokenGenerationTriggerEvent): Promise<PreTokenGenerationTriggerEvent> => {
-  const newEvent = event;
-  console.log(newEvent);
+  let tenant = '';
+  if( 
+    event.triggerSource == 'TokenGeneration_Authentication' &&
+    event.request.clientMetadata?.step == 'Impersonation_RespondToChallenge'
+  ) {
+    tenant = event.request.clientMetadata?.tenant;
+  };
 
-  const result = await client.send(new GetItemCommand({
-    TableName: process.env.TABLE_NAME!,
-    Key: {
-      sub: { S: event.request.userAttributes.sub },
-    },
-  }));
-  newEvent.response = {
+  event.response = {
     claimsOverrideDetails: {
       claimsToAddOrOverride: {
-        customerid: result.Item?.userid.S ?? '',
+        tenant,
       },
       claimsToSuppress: [],
       groupOverrideDetails: {
@@ -25,5 +22,5 @@ export const handler = async (event: PreTokenGenerationTriggerEvent): Promise<Pr
       },
     }
   };
-  return newEvent;
+  return event;
 };

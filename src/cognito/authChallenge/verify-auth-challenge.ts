@@ -1,11 +1,10 @@
 import { VerifyAuthChallengeResponseTriggerEvent } from 'aws-lambda';
 
 export const handler = async (event: VerifyAuthChallengeResponseTriggerEvent) => {
-  console.log(event);
-
-  event.response.answerCorrect = event.request.challengeAnswer === 'impersonation';
-
-  console.log(event);
-
+  if (event.request.clientMetadata?.tenant &&
+      event.request.userAttributes?.['custom:tenants']?.split(',')?.includes(event.request.clientMetadata?.tenant)
+  ) {
+      event.response.answerCorrect = event.request.challengeAnswer === 'impersonation';
+  }
   return event;
 };

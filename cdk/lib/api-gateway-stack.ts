@@ -1,13 +1,11 @@
-import { RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { Duration, Stack, StackProps } from "aws-cdk-lib";
 import { HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { join, resolve } from "path";
-import { LambdaConfiguration } from "../helpers/lambda-nodejs";
 import { IUserPool, IUserPoolClient } from "aws-cdk-lib/aws-cognito";
-import { ManagedPolicy, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
-import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
+import { LambdaFunction } from "./lambda-reource";
+import { HttpUserPoolAuthorizer, HttpLambdaAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 
 export interface ApiGatewayStackProps extends StackProps {
   cognito: {
@@ -22,75 +20,54 @@ export class ApiGatewayStack extends Stack  {
   constructor(scope: Construct, id: string, props: ApiGatewayStackProps) {
     super(scope, id, props);
 
-    const lambdaServiceRole = new ServicePrincipal('lambda.amazonaws.com');
+    const cognitoPasswordAuthorizer = new HttpUserPoolAuthorizer('CognitoPasswordUserPoolAuthorizer', props.cognito.userPool, {
+      userPoolClients: [ props.cognito.passwordAuthClient ]
+    });
 
-    const createUserFunctionRole = new Role(this, 'CreateUserFunctionRole', { 
-      assumedBy: lambdaServiceRole,
-      managedPolicies: [ ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole') ]
-     });
+    const customAuthorizer =  new LambdaFunction(this, 'CustomAuthorizer', {
+      entry: resolve(join(__dirname, '../../src/authorizer/handler.ts')),
+      bundling: {
+        banner: `import { createRequire } from 'module';const require = createRequire(import.meta.url);`,
+      },
+      environment: {
+        COGNITO_USER_POOL_CLIENT_ID: props.cognito.secureAuthClient.userPoolClientId,
+        COGNITO_USER_POOL_ID: props.cognito.userPool.userPoolId,
+      }
+    });
 
-    const createUserFunction =  new NodejsFunction(this, 'CreateUserFunction', {
-      entry: resolve(join(__dirname, '../../src/api/create-user/handler.ts')),
-      handler: 'handler',
-      role: createUserFunctionRole,
-      ...LambdaConfiguration,
+    const cognitoImpersonationAuthorizer = new HttpLambdaAuthorizer('CognitoImpersonationAuthorizer', customAuthorizer , {
+      resultsCacheTtl: Duration.seconds(0),
+    });
+
+
+    const downStreamFunction =  new LambdaFunction(this, 'DownStreamFunction', {
+      entry: resolve(join(__dirname, '../../src/api/down-stream/handler.ts')),
+    });
+
+    const createUserFunction =  new LambdaFunction(this, 'CreateUserFunction', {
+      entry: resolve(join(__dirname, '../../src/api/signup-user/handler.ts')),
       environment: {
         COGNITO_USER_POOL_CLIENT_ID: props.cognito.passwordAuthClient.userPoolClientId,
         COGNITO_USER_POOL_ID: props.cognito.userPool.userPoolId,
       }
     });
 
-    new LogGroup(this, 'CreateUserFunctionLogGroup', {
-      logGroupName: `/aws/lambda/${createUserFunction.functionName}`,
-      removalPolicy: RemovalPolicy.DESTROY,
-      retention: RetentionDays.ONE_DAY
-    });
-
-    const signInFunctionRole = new Role(this, 'SignInFunctionRole', { 
-      assumedBy: lambdaServiceRole,
-      managedPolicies: [ ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole') ]
-     });
-
-    const signInFunction =  new NodejsFunction(this, 'SignInFunction', {
+    const signInFunction =  new LambdaFunction(this, 'SignInFunction', {
       entry: resolve(join(__dirname, '../../src/api/signin-user/handler.ts')),
-      handler: 'handler',
-      role: signInFunctionRole,
-      ...LambdaConfiguration,
       environment: {
         COGNITO_USER_POOL_CLIENT_ID: props.cognito.passwordAuthClient.userPoolClientId,
         COGNITO_USER_POOL_ID: props.cognito.userPool.userPoolId,
       }
     });
 
-    new LogGroup(this, 'SignInFunctionLogGroup', {
-      logGroupName: `/aws/lambda/${signInFunction.functionName}`,
-      removalPolicy: RemovalPolicy.DESTROY,
-      retention: RetentionDays.ONE_DAY
-    });
-
-    const impersonassionAuthFunctionRole = new Role(this, 'ImpersonassionAuthFunctionRole', { 
-      assumedBy: lambdaServiceRole,
-      managedPolicies: [ ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole') ]
-     });
-
-    const impersonassionAuthFunction =  new NodejsFunction(this, 'ImpersonassionAuthFunction', {
+    const impersonassionAuthFunction =  new LambdaFunction(this, 'ImpersonassionAuthFunction', {
       entry: resolve(join(__dirname, '../../src/api/impersonate-user/handler.ts')),
-      handler: 'handler',
-      role: impersonassionAuthFunctionRole,
-      ...LambdaConfiguration,
       environment: {
         COGNITO_USER_POOL_CLIENT_ID: props.cognito.secureAuthClient.userPoolClientId,
         COGNITO_USER_POOL_ID: props.cognito.userPool.userPoolId,
         // COGNITO_SECURE_CLIENT_SECRET: props.cognito.secureAuthClient..unsafeUnwrap(),
       }
     });
-
-    new LogGroup(this, 'ImpersonassionAuthFunctionLogGroup', {
-      logGroupName: `/aws/lambda/${impersonassionAuthFunction.functionName}`,
-      removalPolicy: RemovalPolicy.DESTROY,
-      retention: RetentionDays.ONE_DAY
-    });
-
 
     const api = new HttpApi(
       this,
@@ -112,15 +89,28 @@ export class ApiGatewayStack extends Stack  {
       api.addRoutes({
         path: '/user/impersonate',
         methods: [ HttpMethod.POST ],
-        integration: new HttpLambdaIntegration('ImpersonassionAuthFunctionIntegration', impersonassionAuthFunction)
+        integration: new HttpLambdaIntegration('ImpersonassionAuthFunctionIntegration', impersonassionAuthFunction),
+        authorizer: cognitoPasswordAuthorizer
+      });
+      
+      api.addRoutes({
+        path: '/downstream',
+        methods: [ HttpMethod.POST ],
+        integration: new HttpLambdaIntegration('DownStreamFunctionIntegration', downStreamFunction),
+        authorizer: cognitoImpersonationAuthorizer
       });
 
-      props.cognito.userPool.grant(createUserFunctionRole,
+      props.cognito.userPool.grant(createUserFunction,
         'cognito-idp:*',
       );
 
-      props.cognito.userPool.grant(createUserFunctionRole,
+      props.cognito.userPool.grant(signInFunction,
         'cognito-idp:*',
       );
+
+      props.cognito.userPool.grant(impersonassionAuthFunction,
+        'cognito-idp:*',
+      );
+
   }
 }

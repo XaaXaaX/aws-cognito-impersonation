@@ -5,11 +5,7 @@
     "cdk": "bin/cdk.js"
   },
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "test": "jest",
-    "cdk:app": "cdk --app 'ts-node --prefer-ts-exts ./bin/app.ts'",
-    "cdk:app:dev": "npm run cdk:app -- --profile serverless -c env=dev --all --require-approval never"
+    "cdk:app": "npm run cdk:app:dev --prefix cdk"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
@@ -22,8 +18,6 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.137.0",
-    "constructs": "^10.3.0",
     "source-map-support": "^0.5.21"
   }
 }
